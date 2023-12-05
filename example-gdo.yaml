@@ -1,0 +1,96 @@
+---
+substitutions:
+  name: "gdo"
+  friendly_name: "Garage Door Opener"
+  device_description: "Garage Door Opener"
+  platform: esp8266
+  board: d1_mini
+  external_components_source: github://tronikos/esphome-gdo@main
+  relay_pin: D1
+  open_endstop_pin: D2
+  input_obst_pin: D7
+  debounce_duration: 20ms
+  relay_on_duration: 80ms
+  double_press_delay: 160ms
+  open_duration: 12.6s
+  close_duration: 12.6s
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  comment: ${device_description}
+  min_version: "2023.2.0"
+  platform: $platform
+  board: $board
+  project:
+    name: "tronikos.esphome-gdo"
+    version: 1.0.0
+
+preferences:
+  flash_write_interval: "24h"
+
+logger:
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  ap:
+    password: !secret captive_portal_password
+
+captive_portal:
+
+external_components:
+  - source: ${external_components_source}
+
+binary_sensor:
+  - platform: gpio
+    id: open_endstop
+    name: Open endstop
+    disabled_by_default: true
+    pin:
+      number: ${open_endstop_pin}
+      mode: INPUT_PULLUP
+      inverted: true
+    filters:
+      - delayed_on: ${debounce_duration}
+  - platform: gdo
+    id: obstruction
+    name: Obstruction
+    device_class: problem
+    input_obst_pin: ${input_obst_pin}
+
+switch:
+  - platform: gpio
+    id: relay
+    name: Relay
+    disabled_by_default: true
+    pin: ${relay_pin}
+    restore_mode: ALWAYS_OFF
+    on_turn_on:
+      - delay: ${relay_on_duration}
+      - switch.turn_off: relay
+
+cover:
+  - platform: gdo
+    id: gdo_cover
+    name: None
+    device_class: garage
+    open_duration: ${open_duration}
+    close_duration: ${close_duration}
+    single_press_action:
+      - logger.log: "relay single press"
+      - switch.turn_on: relay
+    double_press_action:
+      - logger.log: "relay double press"
+      - switch.turn_on: relay
+      - delay: ${double_press_delay}
+      - switch.turn_on: relay
+    open_endstop: open_endstop
