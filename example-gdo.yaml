@@ -3,8 +3,6 @@ substitutions:
   name: "gdo"
   friendly_name: "Garage Door Opener"
   device_description: "Garage Door Opener"
-  platform: esp8266
-  board: d1_mini
   external_components_source: github://tronikos/esphome-gdo@main
   relay_pin: D1
   open_endstop_pin: D2
@@ -25,6 +23,10 @@ esphome:
   project:
     name: "tronikos.esphome-gdo"
     version: 1.0.0
+
+esp8266:
+  board: d1_mini
+  restore_from_flash: true
 
 preferences:
   flash_write_interval: "24h"
