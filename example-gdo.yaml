@@ -17,9 +17,7 @@ esphome:
   name: ${name}
   friendly_name: ${friendly_name}
   comment: ${device_description}
-  min_version: "2023.2.0"
-  platform: $platform
-  board: $board
+  min_version: "2025.5.0"
   project:
     name: "tronikos.esphome-gdo"
     version: 1.0.0

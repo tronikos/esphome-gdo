@@ -13,12 +13,15 @@ GdoBinarySensor = gdo_ns.class_(
 
 CONF_INPUT_OBST = "input_obst_pin"
 
-CONFIG_SCHEMA = binary_sensor.BINARY_SENSOR_SCHEMA.extend(
-    {
-        cv.GenerateID(): cv.declare_id(GdoBinarySensor),
-        cv.Required(CONF_INPUT_OBST): pins.gpio_input_pin_schema,
-    }
-).extend(cv.COMPONENT_SCHEMA)
+CONFIG_SCHEMA = (
+    binary_sensor.binary_sensor_schema(GdoBinarySensor)
+    .extend(
+        {
+            cv.Required(CONF_INPUT_OBST): pins.gpio_input_pin_schema,
+        }
+    )
+    .extend(cv.COMPONENT_SCHEMA)
+)
 
 
 async def to_code(config):

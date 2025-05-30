@@ -16,21 +16,24 @@ GdoCover = gdo_ns.class_("GdoCover", cover.Cover, cg.Component)
 CONF_SINGLE_PRESS_ACTION = "single_press_action"
 CONF_DOUBLE_PRESS_ACTION = "double_press_action"
 
-CONFIG_SCHEMA = cover.COVER_SCHEMA.extend(
-    {
-        cv.GenerateID(): cv.declare_id(GdoCover),
-        cv.Optional(CONF_OPEN_ENDSTOP): cv.use_id(binary_sensor.BinarySensor),
-        cv.Required(CONF_OPEN_DURATION): cv.positive_time_period_milliseconds,
-        cv.Optional(CONF_CLOSE_ENDSTOP): cv.use_id(binary_sensor.BinarySensor),
-        cv.Required(CONF_CLOSE_DURATION): cv.positive_time_period_milliseconds,
-        cv.Required(CONF_SINGLE_PRESS_ACTION): automation.validate_automation(
-            single=True
-        ),
-        cv.Required(CONF_DOUBLE_PRESS_ACTION): automation.validate_automation(
-            single=True
-        ),
-    }
-).extend(cv.COMPONENT_SCHEMA)
+CONFIG_SCHEMA = (
+    cover.cover_schema(GdoCover)
+    .extend(
+        {
+            cv.Optional(CONF_OPEN_ENDSTOP): cv.use_id(binary_sensor.BinarySensor),
+            cv.Required(CONF_OPEN_DURATION): cv.positive_time_period_milliseconds,
+            cv.Optional(CONF_CLOSE_ENDSTOP): cv.use_id(binary_sensor.BinarySensor),
+            cv.Required(CONF_CLOSE_DURATION): cv.positive_time_period_milliseconds,
+            cv.Required(CONF_SINGLE_PRESS_ACTION): automation.validate_automation(
+                single=True
+            ),
+            cv.Required(CONF_DOUBLE_PRESS_ACTION): automation.validate_automation(
+                single=True
+            ),
+        }
+    )
+    .extend(cv.COMPONENT_SCHEMA)
+)
 
 
 async def to_code(config):
