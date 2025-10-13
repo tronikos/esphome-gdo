@@ -17,7 +17,7 @@ repos:
           - flake8-docstrings==1.7.0
           - pydocstyle==6.3.0
   - repo: https://github.com/asottile/pyupgrade
-    rev: v3.20.0
+    rev: v3.21.0
     hooks:
       - id: pyupgrade
         args: [--py39-plus]
