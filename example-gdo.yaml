@@ -65,7 +65,6 @@ binary_sensor:
   - platform: gdo
     id: obstruction
     name: Obstruction
-    device_class: problem
     input_obst_pin: ${input_obst_pin}
 
 switch:

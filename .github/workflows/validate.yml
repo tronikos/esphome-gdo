@@ -1,0 +1,75 @@
+---
+name: Validate configs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Weekly run against ESPHome dev, so upstream breaking changes surface here
+    # before they reach users. See the install steps below.
+    - cron: '0 6 * * 1'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  esphome-config:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      # Push/PR builds use the latest stable release so contributors are never
+      # blocked by unrelated upstream churn. Only the weekly scheduled run
+      # tracks dev, where a failure is an early warning rather than a blocker.
+      - name: Install ESPHome (stable)
+        if: github.event_name != 'schedule'
+        run: pip install esphome
+
+      - name: Install ESPHome (dev)
+        if: github.event_name == 'schedule'
+        run: pip install git+https://github.com/esphome/esphome@dev
+
+      - name: Show ESPHome version
+        run: esphome version
+
+      - name: Validate every config
+        # Validates the components against the working tree via a local
+        # external_components source, so a schema change is caught here rather
+        # than by users pulling @main.
+        run: esphome config tests/test-*.yaml
+
+  esphome-compile:
+    # Config validation cannot catch C++ errors, which is where most of the
+    # component actually lives. Compiling one config covers both platforms.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.espressif
+            tests/.esphome
+          key: platformio-${{ hashFiles('tests/*.yaml') }}
+          restore-keys: platformio-
+
+      - name: Install ESPHome
+        run: pip install esphome
+
+      - name: Compile
+        run: esphome compile tests/test-open-endstop.yaml

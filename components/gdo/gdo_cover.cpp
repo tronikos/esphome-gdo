@@ -8,11 +8,22 @@ namespace gdo {
 static const char *const TAG = "gdo.cover";
 
 const float UNKNOWN_POSITION = 0.5f;
+// While an endstop is configured but has not confirmed the travel yet, the
+// time-based estimate is held just short of the limit. Reporting a flat 100%
+// (or 0%) makes the cover look finished while the door is still moving.
+const float ALMOST_OPEN = 0.99f;
+const float ALMOST_CLOSED = 0.01f;
 
 using namespace esphome::cover;
 
+// How long to wait for an endstop before giving up on it. The travel-time
+// estimate is never exact, so allow a margin over the configured duration.
+// Timing out at exactly the duration means a door that takes 12.8s when
+// configured for 12.6s glitches to an unknown position on every single cycle.
+static uint32_t endstop_timeout(uint32_t duration) { return duration + duration / 4 + 2000; }
+
 void GdoCover::dump_config() {
-  LOG_COVER("", "Time Based Endstop Cover", this);
+  LOG_COVER("", "GDO Cover", this);
   LOG_BINARY_SENSOR("  ", "Open Endstop", this->open_endstop_);
   ESP_LOGCONFIG(TAG, "  Open Duration: %.1fs", this->open_duration_ / 1e3f);
   LOG_BINARY_SENSOR("  ", "Close Endstop", this->close_endstop_);
@@ -108,9 +119,9 @@ void GdoCover::loop() {
     }
     this->publish_state();
   } else if ((this->current_operation == COVER_OPERATION_OPENING && this->open_endstop_ != nullptr &&
-              now - this->start_dir_time_ > this->open_duration_) ||
+              now - this->start_dir_time_ > endstop_timeout(this->open_duration_)) ||
              (this->current_operation == COVER_OPERATION_CLOSING && this->close_endstop_ != nullptr &&
-              now - this->start_dir_time_ > this->close_duration_)) {
+              now - this->start_dir_time_ > endstop_timeout(this->close_duration_))) {
     ESP_LOGI(TAG, "Failed to reach endstop. Likely stopped externally.");
     this->position = UNKNOWN_POSITION;
     this->current_operation = COVER_OPERATION_IDLE;
@@ -188,11 +199,11 @@ void GdoCover::start_direction_(CoverOperation dir, bool perform_trigger) {
       switch (this->current_operation) {
         case COVER_OPERATION_OPENING:
           ESP_LOGI(TAG, "Door is opening. Asked to stop.");
-          trig = this->single_press_trigger_;
+          trig = &this->single_press_trigger_;
           break;
         case COVER_OPERATION_CLOSING:
           ESP_LOGI(TAG, "Door is closing. Asked to stop.");
-          trig = this->double_press_trigger_;
+          trig = &this->double_press_trigger_;
           break;
         default:
           return;
@@ -203,18 +214,18 @@ void GdoCover::start_direction_(CoverOperation dir, bool perform_trigger) {
         case COVER_OPERATION_IDLE:
           if (this->position == COVER_CLOSED) {
             ESP_LOGI(TAG, "Door is fully closed. Asked to open.");
-            trig = this->single_press_trigger_;
+            trig = &this->single_press_trigger_;
           } else if (this->position == COVER_OPEN) {
             ESP_LOGW(TAG, "Door is fully open. Cannot open more.");
             return;
           } else {
             ESP_LOGI(TAG, "Door is partially open. Asked to open more.");
-            trig = this->double_press_trigger_;
+            trig = &this->double_press_trigger_;
           }
           break;
         case COVER_OPERATION_CLOSING:
           ESP_LOGI(TAG, "Door is closing. Asked to open.");
-          trig = this->single_press_trigger_;
+          trig = &this->single_press_trigger_;
           break;
         default:
           return;
@@ -227,16 +238,16 @@ void GdoCover::start_direction_(CoverOperation dir, bool perform_trigger) {
             ESP_LOGI(TAG, "Door is fully closed. Cannot close more.");
             return;
           } else if (this->position == COVER_OPEN) {
-            ESP_LOGW(TAG, "Door is fully open. Asked to close.");
-            trig = this->single_press_trigger_;
+            ESP_LOGI(TAG, "Door is fully open. Asked to close.");
+            trig = &this->single_press_trigger_;
           } else {
             ESP_LOGI(TAG, "Door is partially open. Asked to close more.");
-            trig = this->single_press_trigger_;
+            trig = &this->single_press_trigger_;
           }
           break;
         case COVER_OPERATION_OPENING:
           ESP_LOGI(TAG, "Door is opening. Asked to close.");
-          trig = this->double_press_trigger_;
+          trig = &this->double_press_trigger_;
           break;
         default:
           return;
@@ -262,14 +273,24 @@ void GdoCover::start_direction_(CoverOperation dir, bool perform_trigger) {
 void GdoCover::recompute_position_() {
   float dir;
   float action_dur;
+  float min_pos = COVER_CLOSED;
+  float max_pos = COVER_OPEN;
   switch (this->current_operation) {
     case COVER_OPERATION_OPENING:
       dir = 1.0f;
       action_dur = this->open_duration_;
+      // Only claim fully open once the endstop says so. Gate on the target
+      // being COVER_OPEN, so a partial target of e.g. 0.995 stays reachable.
+      if (this->open_endstop_ != nullptr && this->target_position_ == COVER_OPEN && !this->open_endstop_->state) {
+        max_pos = ALMOST_OPEN;
+      }
       break;
     case COVER_OPERATION_CLOSING:
       dir = -1.0f;
       action_dur = this->close_duration_;
+      if (this->close_endstop_ != nullptr && this->target_position_ == COVER_CLOSED && !this->close_endstop_->state) {
+        min_pos = ALMOST_CLOSED;
+      }
       break;
     case COVER_OPERATION_IDLE:
     default:
@@ -277,7 +298,7 @@ void GdoCover::recompute_position_() {
   }
   const uint32_t now = millis();
   this->position += dir * (now - this->last_recompute_time_) / action_dur;
-  this->position = clamp(this->position, 0.0f, 1.0f);
+  this->position = clamp(this->position, min_pos, max_pos);
   this->last_recompute_time_ = now;
 }
 

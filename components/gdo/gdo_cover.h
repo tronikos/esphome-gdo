@@ -15,8 +15,8 @@ class GdoCover : public cover::Cover, public Component {
   void dump_config() override;
   float get_setup_priority() const override;
 
-  Trigger<> *get_single_press_trigger() const { return this->single_press_trigger_; }
-  Trigger<> *get_double_press_trigger() const { return this->double_press_trigger_; }
+  Trigger<> *get_single_press_trigger() { return &this->single_press_trigger_; }
+  Trigger<> *get_double_press_trigger() { return &this->double_press_trigger_; }
   void set_open_endstop(binary_sensor::BinarySensor *open_endstop) { this->open_endstop_ = open_endstop; }
   void set_close_endstop(binary_sensor::BinarySensor *close_endstop) { this->close_endstop_ = close_endstop; }
   void set_open_duration(uint32_t open_duration) { this->open_duration_ = open_duration; }
@@ -35,10 +35,10 @@ class GdoCover : public cover::Cover, public Component {
 
   binary_sensor::BinarySensor *open_endstop_{nullptr};
   binary_sensor::BinarySensor *close_endstop_{nullptr};
-  uint32_t open_duration_;
-  uint32_t close_duration_;
-  Trigger<> *single_press_trigger_{new Trigger<>()};
-  Trigger<> *double_press_trigger_{new Trigger<>()};
+  uint32_t open_duration_{0};
+  uint32_t close_duration_{0};
+  Trigger<> single_press_trigger_;
+  Trigger<> double_press_trigger_;
   Trigger<> *prev_command_trigger_{nullptr};
   uint32_t last_recompute_time_{0};
   uint32_t start_dir_time_{0};

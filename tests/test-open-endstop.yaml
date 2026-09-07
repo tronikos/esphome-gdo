@@ -1,0 +1,48 @@
+---
+# The setup from example-gdo.yaml: a single reed sensor at the open position.
+substitutions:
+  relay_pin: D1
+  open_endstop_pin: D2
+  input_obst_pin: D7
+
+packages:
+  base: !include base.yaml
+
+binary_sensor:
+  - platform: gpio
+    id: open_endstop
+    name: Open endstop
+    pin:
+      number: ${open_endstop_pin}
+      mode: INPUT_PULLUP
+      inverted: true
+    filters:
+      - delayed_on: 20ms
+  - platform: gdo
+    id: obstruction
+    name: Obstruction
+    input_obst_pin: ${input_obst_pin}
+
+switch:
+  - platform: gpio
+    id: relay
+    pin: ${relay_pin}
+    restore_mode: ALWAYS_OFF
+    on_turn_on:
+      - delay: 80ms
+      - switch.turn_off: relay
+
+cover:
+  - platform: gdo
+    id: gdo_cover
+    name: None
+    device_class: garage
+    open_duration: 12.6s
+    close_duration: 12.6s
+    single_press_action:
+      - switch.turn_on: relay
+    double_press_action:
+      - switch.turn_on: relay
+      - delay: 160ms
+      - switch.turn_on: relay
+    open_endstop: open_endstop

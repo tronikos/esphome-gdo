@@ -4,6 +4,8 @@ from esphome import pins
 from esphome.components import binary_sensor
 from esphome.const import (
     CONF_ID,
+    DEVICE_CLASS_PROBLEM,
+    ENTITY_CATEGORY_DIAGNOSTIC,
 )
 
 gdo_ns = cg.esphome_ns.namespace("gdo")
@@ -14,10 +16,18 @@ GdoBinarySensor = gdo_ns.class_(
 CONF_INPUT_OBST = "input_obst_pin"
 
 CONFIG_SCHEMA = (
-    binary_sensor.binary_sensor_schema(GdoBinarySensor)
+    binary_sensor.binary_sensor_schema(
+        GdoBinarySensor,
+        device_class=DEVICE_CLASS_PROBLEM,
+        entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
+    )
     .extend(
         {
-            cv.Required(CONF_INPUT_OBST): pins.gpio_input_pin_schema,
+            # The obstruction line is sampled with a GPIO interrupt, so it has to
+            # be a pin on the ESP itself. internal_gpio_input_pin_schema rejects
+            # port-expander pins here, where they would otherwise pass validation
+            # and then fail the build with an unreadable C++ conversion error.
+            cv.Required(CONF_INPUT_OBST): pins.internal_gpio_input_pin_schema,
         }
     )
     .extend(cv.COMPONENT_SCHEMA)

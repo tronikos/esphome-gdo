@@ -1,12 +1,54 @@
 # esphome-gdo [![Made for ESPHome](https://img.shields.io/badge/Made_for-ESPHome-black?logo=esphome)](https://esphome.io)
 
-This [ESPHome](https://esphome.io) package allows control of a Garage Door Opener with a relay and one or two reed sensors. Supports:
+This [ESPHome](https://esphome.io) external component allows control of a Garage Door Opener with a relay and one or two reed sensors. Supports:
 
 - open/close/stop control
 - most importantly position reporting and control, distinguishing it from other similar projects
 - obstruction sensor
 
 See the included `example-gdo.yaml` for my personal setup with just one reed sensor at the fully-open position.
+
+## Configuration
+
+Add the component to your config:
+
+```yaml
+external_components:
+  - source: github://tronikos/esphome-gdo@main
+```
+
+### `cover` platform `gdo`
+
+| Option                | Type     | Description                                                        |
+|-----------------------|----------|--------------------------------------------------------------------|
+| `open_duration`       | Required | Time the door takes to travel from fully closed to fully open.     |
+| `close_duration`      | Required | Time the door takes to travel from fully open to fully closed.     |
+| `single_press_action` | Required | Automation that pulses the relay once.                             |
+| `double_press_action` | Required | Automation that pulses the relay twice.                            |
+| `open_endstop`        | Optional | ID of a binary sensor that reads on when the door is fully open.   |
+| `close_endstop`       | Optional | ID of a binary sensor that reads on when the door is fully closed. |
+
+At least one of `open_endstop` / `close_endstop` is required. Without one the
+position estimate can never be corrected, so it drifts.
+
+The durations are used two ways: to interpolate the position while the door
+moves, and as the basis for the endstop timeout. The timeout allows 25% plus 2s
+over the configured duration before it gives up and reports an unknown position,
+so the durations do not have to be exact to the millisecond.
+
+Position is held just short of 100% / 0% until the corresponding endstop
+actually confirms it, so the cover does not read "fully open" while the door is
+still moving.
+
+### `binary_sensor` platform `gdo`
+
+Reports the state of the safety obstruction sensor.
+
+| Option           | Type     | Description                                                                                                       |
+|------------------|----------|-------------------------------------------------------------------------------------------------------------------|
+| `input_obst_pin` | Required | Pin wired to the obstruction sensor circuit. Must be a pin on the ESP itself, since it is read with an interrupt. |
+
+Defaults to `device_class: problem` and `entity_category: diagnostic`.
 
 ## Hardware requirements
 
@@ -47,4 +89,7 @@ esphome -s external_components_source components compile example-gdo.yaml
 
 # Deploy local code
 esphome -s external_components_source components run example-gdo.yaml
+
+# Validate the same configs CI does
+esphome config tests/test-*.yaml
 ```

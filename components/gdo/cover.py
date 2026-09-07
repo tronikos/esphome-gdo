@@ -16,7 +16,7 @@ GdoCover = gdo_ns.class_("GdoCover", cover.Cover, cg.Component)
 CONF_SINGLE_PRESS_ACTION = "single_press_action"
 CONF_DOUBLE_PRESS_ACTION = "double_press_action"
 
-CONFIG_SCHEMA = (
+CONFIG_SCHEMA = cv.All(
     cover.cover_schema(GdoCover)
     .extend(
         {
@@ -32,7 +32,10 @@ CONFIG_SCHEMA = (
             ),
         }
     )
-    .extend(cv.COMPONENT_SCHEMA)
+    .extend(cv.COMPONENT_SCHEMA),
+    # With no endstop at all this degrades to a plain time-based cover that can
+    # never correct its drift, which is almost certainly a config mistake.
+    cv.has_at_least_one_key(CONF_OPEN_ENDSTOP, CONF_CLOSE_ENDSTOP),
 )
 
 
@@ -42,12 +45,12 @@ async def to_code(config):
     await cover.register_cover(var, config)
 
     if CONF_OPEN_ENDSTOP in config:
-        bin = await cg.get_variable(config[CONF_OPEN_ENDSTOP])
-        cg.add(var.set_open_endstop(bin))
+        endstop = await cg.get_variable(config[CONF_OPEN_ENDSTOP])
+        cg.add(var.set_open_endstop(endstop))
     cg.add(var.set_open_duration(config[CONF_OPEN_DURATION]))
     if CONF_CLOSE_ENDSTOP in config:
-        bin = await cg.get_variable(config[CONF_CLOSE_ENDSTOP])
-        cg.add(var.set_close_endstop(bin))
+        endstop = await cg.get_variable(config[CONF_CLOSE_ENDSTOP])
+        cg.add(var.set_close_endstop(endstop))
     cg.add(var.set_close_duration(config[CONF_CLOSE_DURATION]))
 
     await automation.build_automation(

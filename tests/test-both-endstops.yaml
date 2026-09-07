@@ -1,0 +1,41 @@
+---
+# Both reed sensors fitted, which exercises the close_endstop code paths that
+# the single-endstop config never reaches.
+packages:
+  base: !include base.yaml
+
+binary_sensor:
+  - platform: gpio
+    id: open_endstop
+    name: Open endstop
+    pin:
+      number: D2
+      mode: INPUT_PULLUP
+      inverted: true
+  - platform: gpio
+    id: close_endstop
+    name: Close endstop
+    pin:
+      number: D5
+      mode: INPUT_PULLUP
+      inverted: true
+
+switch:
+  - platform: gpio
+    id: relay
+    pin: D1
+    restore_mode: ALWAYS_OFF
+
+cover:
+  - platform: gdo
+    id: gdo_cover
+    name: None
+    device_class: garage
+    open_duration: 12.6s
+    close_duration: 12.6s
+    single_press_action:
+      - switch.turn_on: relay
+    double_press_action:
+      - switch.turn_on: relay
+    open_endstop: open_endstop
+    close_endstop: close_endstop
