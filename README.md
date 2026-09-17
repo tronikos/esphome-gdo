@@ -42,6 +42,12 @@ Position is held just short of 100% / 0% until the corresponding endstop
 actually confirms it, so the cover does not read "fully open" while the door is
 still moving.
 
+A double or triple press only starts the door travelling on its last press, so
+while one is still running the position estimate is held and no stop is
+triggered from it. Otherwise the estimate runs ahead of a door that has not
+moved yet, and on a short move it can cut the press sequence short before its
+remaining presses have fired.
+
 The component never asks the opener for a direction, it only presses the button,
 so how many presses a command needs depends on what the door is doing. That is
 derived from `press_while_closing`, the one button behavior that differs

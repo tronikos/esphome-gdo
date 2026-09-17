@@ -47,6 +47,7 @@ class GdoCover : public cover::Cover, public Component {
  protected:
   void control(const cover::CoverCall &call) override;
   void stop_prev_trigger_();
+  bool press_in_progress_();
   bool is_at_target_() const;
 
   optional<cover::CoverOperation> op_after_press_(cover::CoverOperation op, float position,

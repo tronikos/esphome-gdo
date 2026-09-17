@@ -112,7 +112,9 @@ void GdoCover::loop() {
   // Recompute position every loop cycle
   this->recompute_position_();
 
-  if (this->is_at_target_()) {
+  // Waiting on the rest of a multi-press: stopping now would cancel the presses
+  // that have not happened yet.
+  if (this->is_at_target_() && !this->press_in_progress_()) {
     if (this->target_position_ == COVER_OPEN || this->target_position_ == COVER_CLOSED) {
       // Don't trigger stop, let the cover stop by itself.
       this->current_operation = COVER_OPERATION_IDLE;
@@ -166,6 +168,13 @@ void GdoCover::control(const CoverCall &call) {
       }
     }
   }
+}
+
+// A multi-press action leaves the door standing where it is until its last
+// press: the earlier ones only stop or reverse it. While one is still running
+// the door is not yet travelling the way it was asked to.
+bool GdoCover::press_in_progress_() {
+  return this->prev_command_trigger_ != nullptr && this->prev_command_trigger_->is_action_running();
 }
 
 void GdoCover::stop_prev_trigger_() {
@@ -347,6 +356,12 @@ void GdoCover::recompute_position_() {
       return;
   }
   const uint32_t now = millis();
+  if (this->press_in_progress_()) {
+    // Credit no travel for this tick, but keep the clock moving so that the
+    // time the door stood still is not counted once it does start.
+    this->last_recompute_time_ = now;
+    return;
+  }
   this->position += dir * (now - this->last_recompute_time_) / action_dur;
   this->position = clamp(this->position, min_pos, max_pos);
   this->last_recompute_time_ = now;
