@@ -28,6 +28,8 @@ void GdoCover::dump_config() {
   ESP_LOGCONFIG(TAG, "  Open Duration: %.1fs", this->open_duration_ / 1e3f);
   LOG_BINARY_SENSOR("  ", "Close Endstop", this->close_endstop_);
   ESP_LOGCONFIG(TAG, "  Close Duration: %.1fs", this->close_duration_ / 1e3f);
+  ESP_LOGCONFIG(TAG, "  Press While Closing: %s",
+                this->press_while_closing_ == PRESS_WHILE_CLOSING_STOPS ? "stop" : "open");
 }
 
 void GdoCover::setup() {
@@ -155,8 +157,13 @@ void GdoCover::control(const CoverCall &call) {
       ESP_LOGI(TAG, "Nothing to do. Already at target position.");
     } else {
       auto op = pos < this->position ? COVER_OPERATION_CLOSING : COVER_OPERATION_OPENING;
+      const float prev_target = this->target_position_;
       this->target_position_ = pos;
-      this->start_direction_(op);
+      if (!this->start_direction_(op)) {
+        // The door kept doing whatever it was doing, so the target it was
+        // travelling to has to stay as it was or loop() would cut it short.
+        this->target_position_ = prev_target;
+      }
     }
   }
 }
@@ -186,88 +193,131 @@ bool GdoCover::is_at_target_() const {
   }
 }
 
-void GdoCover::start_direction_(CoverOperation dir, bool perform_trigger) {
+// The opener has no way to tell us what it is doing, so model it: given what
+// the door is doing now, what will it be doing after one press of the button?
+// Returns nothing when that cannot be told, which only happens on an opener
+// that goes against the last direction of travel when there has not been one.
+optional<CoverOperation> GdoCover::op_after_press_(CoverOperation op, float position,
+                                                   CoverOperation last_travel_dir) const {
+  switch (op) {
+    case COVER_OPERATION_OPENING:
+      return COVER_OPERATION_IDLE;
+    case COVER_OPERATION_CLOSING:
+      if (this->press_while_closing_ == PRESS_WHILE_CLOSING_STOPS) {
+        return COVER_OPERATION_IDLE;
+      }
+      return COVER_OPERATION_OPENING;
+    case COVER_OPERATION_IDLE:
+    default:
+      break;
+  }
+  // A door standing on an endstop can only travel one way.
+  if (position == COVER_CLOSED) {
+    return COVER_OPERATION_OPENING;
+  }
+  if (position == COVER_OPEN) {
+    return COVER_OPERATION_CLOSING;
+  }
+  if (this->press_while_closing_ == PRESS_WHILE_CLOSING_OPENS) {
+    return COVER_OPERATION_CLOSING;
+  }
+  switch (last_travel_dir) {
+    case COVER_OPERATION_OPENING:
+      return COVER_OPERATION_CLOSING;
+    case COVER_OPERATION_CLOSING:
+      return COVER_OPERATION_OPENING;
+    default:
+      return {};
+  }
+}
+
+// Returns false if the opener cannot get from what it is doing now to dir, so
+// that the caller can leave the current travel and its target alone.
+bool GdoCover::start_direction_(CoverOperation dir, bool perform_trigger) {
   if (dir == this->current_operation) {
     ESP_LOGI(TAG, "Nothing to do. CoverOperation %d didn't change.", dir);
-    return;
+    return true;
   }
 
   this->recompute_position_();
-  Trigger<> *trig;
-  switch (dir) {
-    case COVER_OPERATION_IDLE:
-      switch (this->current_operation) {
-        case COVER_OPERATION_OPENING:
-          ESP_LOGI(TAG, "Door is opening. Asked to stop.");
-          trig = &this->single_press_trigger_;
-          break;
-        case COVER_OPERATION_CLOSING:
-          ESP_LOGI(TAG, "Door is closing. Asked to stop.");
-          trig = &this->double_press_trigger_;
-          break;
-        default:
-          return;
+
+  if (this->current_operation == COVER_OPERATION_IDLE) {
+    if (dir == COVER_OPERATION_OPENING && this->position == COVER_OPEN) {
+      ESP_LOGW(TAG, "Door is fully open. Cannot open more.");
+      return false;
+    }
+    if (dir == COVER_OPERATION_CLOSING && this->position == COVER_CLOSED) {
+      ESP_LOGW(TAG, "Door is fully closed. Cannot close more.");
+      return false;
+    }
+  }
+
+  // Someone else moved the door: there is nothing to press, only state to catch
+  // up with.
+  Trigger<> *trig = nullptr;
+  if (perform_trigger) {
+    Trigger<> *const press_triggers[] = {&this->single_press_trigger_, &this->double_press_trigger_,
+                                         &this->triple_press_trigger_};
+    static const char *const PRESS_NAMES[] = {"single", "double", "triple"};
+    const char *presses = nullptr;
+    // Press the button in the model until the door ends up doing what was
+    // asked. Two presses are enough on an opener that reverses a closing door;
+    // one that stops it needs three to send a door that was stopped part-way
+    // back the way it came.
+    CoverOperation op = this->current_operation;
+    float position = this->position;
+    CoverOperation last_travel_dir = this->last_travel_dir_;
+    for (size_t i = 0; i < sizeof(PRESS_NAMES) / sizeof(PRESS_NAMES[0]); i++) {
+      const optional<CoverOperation> next_op = this->op_after_press_(op, position, last_travel_dir);
+      if (!next_op.has_value()) {
+        break;
       }
-      break;
-    case COVER_OPERATION_OPENING:
-      switch (this->current_operation) {
-        case COVER_OPERATION_IDLE:
-          if (this->position == COVER_CLOSED) {
-            ESP_LOGI(TAG, "Door is fully closed. Asked to open.");
-            trig = &this->single_press_trigger_;
-          } else if (this->position == COVER_OPEN) {
-            ESP_LOGW(TAG, "Door is fully open. Cannot open more.");
-            return;
-          } else {
-            ESP_LOGI(TAG, "Door is partially open. Asked to open more.");
-            trig = &this->double_press_trigger_;
-          }
-          break;
-        case COVER_OPERATION_CLOSING:
-          ESP_LOGI(TAG, "Door is closing. Asked to open.");
-          trig = &this->single_press_trigger_;
-          break;
-        default:
-          return;
+      op = *next_op;
+      if (op != COVER_OPERATION_IDLE) {
+        // The door is travelling again, so it is no longer on an endstop.
+        last_travel_dir = op;
+        position = UNKNOWN_POSITION;
       }
-      break;
-    case COVER_OPERATION_CLOSING:
-      switch (this->current_operation) {
-        case COVER_OPERATION_IDLE:
-          if (this->position == COVER_CLOSED) {
-            ESP_LOGI(TAG, "Door is fully closed. Cannot close more.");
-            return;
-          } else if (this->position == COVER_OPEN) {
-            ESP_LOGI(TAG, "Door is fully open. Asked to close.");
-            trig = &this->single_press_trigger_;
-          } else {
-            ESP_LOGI(TAG, "Door is partially open. Asked to close more.");
-            trig = &this->single_press_trigger_;
-          }
-          break;
-        case COVER_OPERATION_OPENING:
-          ESP_LOGI(TAG, "Door is opening. Asked to close.");
-          trig = &this->double_press_trigger_;
-          break;
-        default:
-          return;
+      if (op == dir) {
+        trig = press_triggers[i];
+        presses = PRESS_NAMES[i];
+        break;
       }
-      break;
-    default:
-      return;
+    }
+    if (trig == nullptr) {
+      if (this->last_travel_dir_ == COVER_OPERATION_IDLE) {
+        // Nothing has moved the door since boot, so which way this opener sends
+        // a door that is standing part-way is anybody's guess. Once the door
+        // reaches an endstop the next press is predictable again.
+        ESP_LOGW(TAG, "Door is at position %.2f and has not moved since boot, so the next press is unpredictable.",
+                 this->position);
+      } else {
+        ESP_LOGW(TAG, "Door is %s at position %.2f. Cannot make it %s with this opener.",
+                 LOG_STR_ARG(cover_operation_to_str(this->current_operation)), this->position,
+                 LOG_STR_ARG(cover_operation_to_str(dir)));
+      }
+      return false;
+    }
+    ESP_LOGI(TAG, "Door is %s at position %.2f. Asked to make it %s. Performing a %s press.",
+             LOG_STR_ARG(cover_operation_to_str(this->current_operation)), this->position,
+             LOG_STR_ARG(cover_operation_to_str(dir)), presses);
   }
 
   this->current_operation = dir;
+  if (dir != COVER_OPERATION_IDLE) {
+    this->last_travel_dir_ = dir;
+  }
 
   const uint32_t now = millis();
   this->start_dir_time_ = now;
   this->last_recompute_time_ = now;
 
-  if (perform_trigger) {
+  if (trig != nullptr) {
     this->stop_prev_trigger_();
     trig->trigger();
     this->prev_command_trigger_ = trig;
   }
+  return true;
 }
 
 void GdoCover::recompute_position_() {

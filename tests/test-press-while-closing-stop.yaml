@@ -1,0 +1,43 @@
+---
+# An opener whose button stops the door while it is closing instead of
+# reversing it, which changes how many presses each command needs and brings
+# the triple press into play.
+packages:
+  base: !include base.yaml
+
+binary_sensor:
+  - platform: gpio
+    id: close_endstop
+    name: Close endstop
+    pin:
+      number: D5
+      mode: INPUT_PULLUP
+      inverted: true
+
+switch:
+  - platform: gpio
+    id: relay
+    pin: D1
+    restore_mode: ALWAYS_OFF
+
+cover:
+  - platform: gdo
+    id: gdo_cover
+    name: None
+    device_class: garage
+    open_duration: 12.6s
+    close_duration: 12.6s
+    press_while_closing: stop
+    single_press_action:
+      - switch.turn_on: relay
+    double_press_action:
+      - switch.turn_on: relay
+      - delay: 160ms
+      - switch.turn_on: relay
+    triple_press_action:
+      - switch.turn_on: relay
+      - delay: 160ms
+      - switch.turn_on: relay
+      - delay: 160ms
+      - switch.turn_on: relay
+    close_endstop: close_endstop

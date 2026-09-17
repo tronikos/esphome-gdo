@@ -19,14 +19,16 @@ external_components:
 
 ### `cover` platform `gdo`
 
-| Option                | Type     | Description                                                        |
-|-----------------------|----------|--------------------------------------------------------------------|
-| `open_duration`       | Required | Time the door takes to travel from fully closed to fully open.     |
-| `close_duration`      | Required | Time the door takes to travel from fully open to fully closed.     |
-| `single_press_action` | Required | Automation that pulses the relay once.                             |
-| `double_press_action` | Required | Automation that pulses the relay twice.                            |
-| `open_endstop`        | Optional | ID of a binary sensor that reads on when the door is fully open.   |
-| `close_endstop`       | Optional | ID of a binary sensor that reads on when the door is fully closed. |
+| Option                | Type     | Description                                                                                            |
+|-----------------------|----------|--------------------------------------------------------------------------------------------------------|
+| `open_duration`       | Required | Time the door takes to travel from fully closed to fully open.                                         |
+| `close_duration`      | Required | Time the door takes to travel from fully open to fully closed.                                         |
+| `single_press_action` | Required | Automation that pulses the relay once.                                                                 |
+| `double_press_action` | Required | Automation that pulses the relay twice.                                                                |
+| `triple_press_action` | Optional | Automation that pulses the relay three times. Required with `press_while_closing: stop`.               |
+| `open_endstop`        | Optional | ID of a binary sensor that reads on when the door is fully open.                                       |
+| `close_endstop`       | Optional | ID of a binary sensor that reads on when the door is fully closed.                                     |
+| `press_while_closing` | Optional | What the opener does when the button is pressed while the door is closing: `open` (default) or `stop`. |
 
 At least one of `open_endstop` / `close_endstop` is required. Without one the
 position estimate can never be corrected, so it drifts.
@@ -39,6 +41,27 @@ so the durations do not have to be exact to the millisecond.
 Position is held just short of 100% / 0% until the corresponding endstop
 actually confirms it, so the cover does not read "fully open" while the door is
 still moving.
+
+The component never asks the opener for a direction, it only presses the button,
+so how many presses a command needs depends on what the door is doing. That is
+derived from `press_while_closing`, the one button behavior that differs
+between openers:
+
+- `open` (default): a press while the door is closing reverses it, and a press
+  on a door standing partway closes it. Chamberlain, LiftMaster and Genie work
+  this way. At most two presses are ever needed.
+- `stop`: a press while the door is closing stops it, mirroring what a press
+  does while the door is opening. These openers run an impulse sequence, open -
+  stop - close - stop - open, so a press on a door standing partway travels
+  against the direction the door last moved in. Hörmann, Sommer and Marantec
+  work this way. Sending a door that was stopped partway on again the same way
+  it was already going takes three presses (start it back, stop it, go), which
+  is why `triple_press_action` is required in this mode.
+
+In `stop` mode the direction the door last moved in is only known once the door
+has moved, so after a restart with the door standing partway the component
+refuses to press anything and says so in the log. Moving the door to either
+endstop, with the opener's own button if need be, makes it predictable again.
 
 ### `binary_sensor` platform `gdo`
 
@@ -56,7 +79,9 @@ Defaults to `device_class: problem` and `entity_category: diagnostic`.
   - If door is closed a single press opens it.
   - If door is (fully or partially) open a single press closes it.
   - If door is opening a single press stops it.
-  - If door is closing a single press opens it.
+  - If door is closing a single press opens it. Openers that stop the door
+    instead, and then move it against its last direction of travel, are
+    supported with `press_while_closing: stop`.
 - ESP board [compatible](https://esphome.io/#devices) with ESPHome.
 - Relay to either press the physical button of the wall control panel (for Chamberlain Security + 2.0) or short the controls on the garage door opener itself (for Chamberlain Security + 1.0 or Genie etc.).
 - One or two reed sensors to detect the fully-open and/or fully-closed states. If using a single reed sensor, it can be placed in either fully-open or fully-closed positions.
