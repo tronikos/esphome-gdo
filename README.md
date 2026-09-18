@@ -48,6 +48,10 @@ triggered from it. Otherwise the estimate runs ahead of a door that has not
 moved yet, and on a short move it can cut the press sequence short before its
 remaining presses have fired.
 
+A command that arrives while the relay is still working through a press is held
+until that press has finished, rather than cutting it short. The newest command
+wins, so mashing the buttons leaves the door doing whatever was asked last.
+
 The component never asks the opener for a direction, it only presses the button,
 so how many presses a command needs depends on what the door is doing. That is
 derived from `press_while_closing`, the one button behavior that differs

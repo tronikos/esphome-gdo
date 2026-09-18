@@ -46,6 +46,7 @@ class GdoCover : public cover::Cover, public Component {
 
  protected:
   void control(const cover::CoverCall &call) override;
+  void perform_control_(bool stop, const optional<float> &position);
   void stop_prev_trigger_();
   bool press_in_progress_();
   bool is_at_target_() const;
@@ -69,6 +70,10 @@ class GdoCover : public cover::Cover, public Component {
   // PRESS_WHILE_CLOSING_STOPS goes against on the next press. IDLE means it has
   // not travelled since boot, so the next press cannot be predicted.
   cover::CoverOperation last_travel_dir_{cover::COVER_OPERATION_IDLE};
+  // A command that arrived while the relay was still working through a press,
+  // held back until it can be pressed out cleanly. The newest one wins.
+  bool pending_stop_{false};
+  optional<float> pending_position_{};
   uint32_t last_recompute_time_{0};
   uint32_t start_dir_time_{0};
   uint32_t last_publish_time_{0};

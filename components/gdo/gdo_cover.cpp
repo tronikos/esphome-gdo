@@ -103,6 +103,15 @@ void GdoCover::setup() {
 }
 
 void GdoCover::loop() {
+  if ((this->pending_stop_ || this->pending_position_.has_value()) && !this->press_in_progress_()) {
+    const bool stop = this->pending_stop_;
+    const optional<float> position = this->pending_position_;
+    this->pending_stop_ = false;
+    this->pending_position_.reset();
+    ESP_LOGI(TAG, "Press finished. Running the command that was held.");
+    this->perform_control_(stop, position);
+  }
+
   if (this->current_operation == COVER_OPERATION_IDLE) {
     return;
   }
@@ -149,12 +158,26 @@ CoverTraits GdoCover::get_traits() {
 }
 
 void GdoCover::control(const CoverCall &call) {
-  if (call.get_stop()) {
+  if (this->press_in_progress_()) {
+    // Pressing now would put an impulse on the wire too soon after the ones
+    // this press has already sent for the opener to tell them apart, and
+    // cancelling the rest of the press would leave it half done. Hold the
+    // command until the relay is finished.
+    ESP_LOGI(TAG, "A press is still in progress. Holding the command until it finishes.");
+    this->pending_stop_ = call.get_stop();
+    this->pending_position_ = call.get_position();
+    return;
+  }
+  this->perform_control_(call.get_stop(), call.get_position());
+}
+
+void GdoCover::perform_control_(bool stop, const optional<float> &position) {
+  if (stop) {
     this->start_direction_(COVER_OPERATION_IDLE);
     this->publish_state();
   }
-  if (call.get_position().has_value()) {
-    auto pos = *call.get_position();
+  if (position.has_value()) {
+    auto pos = *position;
     if (pos == this->position) {
       ESP_LOGI(TAG, "Nothing to do. Already at target position.");
     } else {
