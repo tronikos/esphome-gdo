@@ -88,9 +88,11 @@ cover:
     single_press_action:
       - logger.log: "relay single press"
       - switch.turn_on: relay
+      - delay: ${double_press_delay}
     double_press_action:
       - logger.log: "relay double press"
       - switch.turn_on: relay
       - delay: ${double_press_delay}
       - switch.turn_on: relay
+      - delay: ${double_press_delay}
     open_endstop: open_endstop

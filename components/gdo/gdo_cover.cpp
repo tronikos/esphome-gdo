@@ -36,28 +36,35 @@ void GdoCover::setup() {
   // Restore state after restart
   auto restore = this->restore_state_();
   if (restore.has_value()) {
-    restore->apply(this);
+    this->position = restore->position;
   } else {
     this->position = UNKNOWN_POSITION;
   }
-  if (this->open_endstop_ != nullptr && this->open_endstop_->has_state()) {
-    // Fix restored state based on open endstop
-    if (this->open_endstop_->state) {
-      this->position = COVER_OPEN;
-    } else if (this->position == COVER_OPEN) {
-      this->position = UNKNOWN_POSITION;
-    }
-  }
-  if (this->close_endstop_ != nullptr && this->close_endstop_->has_state()) {
-    // Fix restored state based on closed endstop
-    if (this->close_endstop_->state) {
-      this->position = COVER_CLOSED;
-    } else if (this->position == COVER_CLOSED) {
-      this->position = UNKNOWN_POSITION;
-    }
-  }
   if (this->open_endstop_ != nullptr) {
+    if (this->open_endstop_->has_state()) {
+      // Fix restored state based on open endstop
+      this->open_endstop_ready_ = true;
+      if (this->open_endstop_->state) {
+        this->position = COVER_OPEN;
+      } else if (this->position == COVER_OPEN) {
+        this->position = UNKNOWN_POSITION;
+      }
+    }
     this->open_endstop_->add_on_state_callback([this](bool value) {
+      if (!this->open_endstop_ready_) {
+        // A filter on the endstop delayed its initial reading past setup().
+        // Reconcile the restored position against it rather than treating the
+        // first report as the door reaching or leaving the endstop.
+        this->open_endstop_ready_ = true;
+        if (value) {
+          this->position = COVER_OPEN;
+          this->publish_state(false);
+        } else if (this->position == COVER_OPEN) {
+          this->position = UNKNOWN_POSITION;
+          this->publish_state(false);
+        }
+        return;
+      }
       if (value) {
         // Reached the open endstop. Update state
         float dur = (millis() - this->start_dir_time_) / 1e3f;
@@ -79,7 +86,27 @@ void GdoCover::setup() {
     });
   }
   if (this->close_endstop_ != nullptr) {
+    if (this->close_endstop_->has_state()) {
+      // Fix restored state based on closed endstop
+      this->close_endstop_ready_ = true;
+      if (this->close_endstop_->state) {
+        this->position = COVER_CLOSED;
+      } else if (this->position == COVER_CLOSED) {
+        this->position = UNKNOWN_POSITION;
+      }
+    }
     this->close_endstop_->add_on_state_callback([this](bool value) {
+      if (!this->close_endstop_ready_) {
+        this->close_endstop_ready_ = true;
+        if (value) {
+          this->position = COVER_CLOSED;
+          this->publish_state(false);
+        } else if (this->position == COVER_CLOSED) {
+          this->position = UNKNOWN_POSITION;
+          this->publish_state(false);
+        }
+        return;
+      }
       if (value) {
         // Reached the closed endstop. Update state
         float dur = (millis() - this->start_dir_time_) / 1e3f;
@@ -100,6 +127,7 @@ void GdoCover::setup() {
       }
     });
   }
+  this->publish_state(false);
 }
 
 void GdoCover::loop() {

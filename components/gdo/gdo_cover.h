@@ -59,6 +59,8 @@ class GdoCover : public cover::Cover, public Component {
 
   binary_sensor::BinarySensor *open_endstop_{nullptr};
   binary_sensor::BinarySensor *close_endstop_{nullptr};
+  bool open_endstop_ready_{false};
+  bool close_endstop_ready_{false};
   uint32_t open_duration_{0};
   uint32_t close_duration_{0};
   PressWhileClosing press_while_closing_{PRESS_WHILE_CLOSING_OPENS};

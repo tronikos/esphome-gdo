@@ -41,8 +41,10 @@ cover:
     close_duration: 12.6s
     single_press_action:
       - switch.turn_on: relay
+      - delay: 160ms
     double_press_action:
       - switch.turn_on: relay
       - delay: 160ms
       - switch.turn_on: relay
+      - delay: 160ms
     open_endstop: open_endstop

@@ -30,14 +30,17 @@ cover:
     press_while_closing: stop
     single_press_action:
       - switch.turn_on: relay
+      - delay: 160ms
     double_press_action:
       - switch.turn_on: relay
       - delay: 160ms
       - switch.turn_on: relay
+      - delay: 160ms
     triple_press_action:
       - switch.turn_on: relay
       - delay: 160ms
       - switch.turn_on: relay
       - delay: 160ms
       - switch.turn_on: relay
+      - delay: 160ms
     close_endstop: close_endstop
